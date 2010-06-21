@@ -176,7 +176,7 @@ abstract class Connection extends ConnectionHelperTask
 	public Connection(ConnectionHelper helper, S_StreamSocket.TaskCallback callback) 
 	{
 		super(helper, callback);
-	}
+	}	
 }
 
 // represents a connection between source and destination
@@ -192,11 +192,12 @@ class ConnectTask extends Connection
 		sourceAddress = srcAddr;
 		destAddress = destAddr;
 	}
-
+	
 	@Override
 	public void performTask() 
 	{
 		int seqNum = new Random().nextInt(0x0FFFFFFF);
+		int retry = 30;
 		byte[] data = new byte[0];
 		TCPHeader synAckHdr = null;
 		TCPHeader ackHdr = null;
@@ -212,10 +213,16 @@ class ConnectTask extends Connection
 				data);
 		
 		synHdr.senderAddr = destAddress;
+		
 		// send a syn
-		callback.PerformTCPSend(synHdr);
-		callback.WaitForRetransmitTimeout();
-		synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
+		while(retry > 0 && synAckHdr == null)
+		{
+			retry--;
+			
+			callback.PerformTCPSend(synHdr);
+			callback.SimpleSleep(2000);
+			synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
+		}
 		
 		if(synAckHdr == null)
 		{
@@ -234,8 +241,26 @@ class ConnectTask extends Connection
 				callback.GetDestWindowSize(), 
 				data);
 		ackHdr.senderAddr = destAddress;
-		callback.PerformTCPSend(ackHdr);
-
+		
+		retry = 30;
+		// we now send the last ack a number of times (hopefully server gets atleast one of them)
+		while(retry > 0)
+		{
+			retry--;
+			callback.SimpleSleep(100);
+			callback.PerformTCPSend(ackHdr);
+		}
+		
+		callback.SimpleSleep(2000);
+		
+		// check if server got atleast one last ack
+		ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, synAckHdr.seqNum.toInt() + 1));
+		if(ackHdr == null)
+		{
+			callback.OnConnectionFailed(this);
+			return;
+		}
+		
 		this.isConnected = true;		
 		callback.OnConnectionSucceeded(this);
 	}
@@ -244,7 +269,7 @@ class ConnectTask extends Connection
 //represents a connection between source and destination
 class AcceptTask extends Connection
 {	
-	private TCPHeader synHdr = null;
+	public TCPHeader synHdr = null;
 	
 	public AcceptTask(
 			ConnectionHelper helper, 
@@ -261,6 +286,7 @@ class AcceptTask extends Connection
 	@Override
 	public void performTask() 
 	{
+		int retry = 30;
 		int seqNum = new Random().nextInt(0x0FFFFFFF);
 		byte[] data = new byte[0];
 		TCPHeader ackHdr = null;
@@ -276,17 +302,31 @@ class AcceptTask extends Connection
 				callback.GetSourceWindowSize(), 
 				data);
 		synAckHdr.senderAddr = destAddress;
-		callback.PerformTCPSend(synAckHdr);
 		
-		callback.WaitForRetransmitTimeout();
-		ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
+		while(retry > 0 && ackHdr == null)
+		{
+			retry--;
+			callback.PerformTCPSend(synAckHdr);
+			callback.SimpleSleep(1000);
+			ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
+		}
+		
 		if(ackHdr == null)
 		{
 			callback.OnConnectionFailed(this);
 			return;
 		}
 		
-		this.isConnected = true;		
+		retry = 30;
+		// we now send the ack for last ack back to client
+		while(retry > 0)
+		{
+			retry--;
+			callback.SimpleSleep(100);
+			callback.PerformTCPSend(ackHdr);
+		}
+		
+		this.isConnected = true;
 		callback.OnConnectionSucceeded(this);
 	}
 }

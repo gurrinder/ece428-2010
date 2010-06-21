@@ -152,7 +152,7 @@ class S_StreamSocket
     			callback.SimpleSleep(100);
     		}
     		
-			throw new SocketTimeoutException();    		
+			throw new SocketException();    		
     	}
     	else
     	{
@@ -248,12 +248,20 @@ class S_StreamSocket
     		// a new connection has arrived
 			if(header.syn == 1 && header.ack == 0 && header.fin == 0)
     		{
-    			// remove this from the list
-    			header = GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN, header.ackNum.toInt()));
-    			
-    			assert(header != null);
-    			
-    			if(activeConn != null && ((AcceptTask)activeConn).synHdr.checksum.toInt() != header.checksum.toInt())
+    			// remove the header type from the list
+    			GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN, header.ackNum.toInt()));
+    			    			
+    			// if currently connected, tell the client it is connected
+    			if(activeConn != null && activeConn.isConnected 
+    					&& header.senderAddr.getHostName().equals(activeConn.destAddress.getHostName())
+    					&& header.senderAddr.getPort() == activeConn.destAddress.getPort())
+    			{
+    				System.out.println("letting client know i am already conencted to him");
+    				header.ack = 1;
+    				header.checksum = Word.createFromInt(TCPHeaderUtil.calculateCheckSum(header));
+    				PerformTCPSend(header);
+    			}
+    			else if(activeConn != null && ((AcceptTask)activeConn).synHdr.checksum.toInt() != header.checksum.toInt())
     			{
     				activeConn.setRunnable(false);
     				while(activeConn.isRunning())
@@ -263,6 +271,7 @@ class S_StreamSocket
     				
     				activeConn = null;
     			}
+    			
     			// create a new connection
     			if(activeConn == null)
     			{

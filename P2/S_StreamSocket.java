@@ -27,6 +27,10 @@ class S_StreamSocket
     /* Constructor. Binds socket to addr */
     public S_StreamSocket(InetSocketAddress addr) throws SocketException
     {
+    	if (addr == null)
+    	{
+    		addr = new InetSocketAddress("localhost", 0);
+    	}
     	localAddr = addr;
     	
     	// initialize buffers

@@ -75,8 +75,10 @@ class S_StreamSocket
     	recvTask.setRunnable(true);
     	sendTask.setRunnable(true);
     	
-    	new Thread(recvTask).start();
-    	new Thread(sendTask).start();
+    	recvTask.setThread(new Thread(recvTask));
+    	recvTask.getThread().start();
+    	sendTask.setThread(new Thread(sendTask));
+    	sendTask.getThread().start();
     	
     	while(retry > 0 && connState.GetState() != ConnectionState.ESTABLISHED)
     	{
@@ -84,13 +86,18 @@ class S_StreamSocket
         	System.out.println("client connecting..");
 	    	activeConn = new ConnectTask(connHelper, callback, localAddr, serverAddr);
 	    	activeConn.setRunnable(true);
-	    	new Thread(activeConn).start();
+	    	activeConn.setThread(new Thread(activeConn));
+	    	activeConn.getThread().start();
 	    	
 	    	// wait for the connection to succeed or fail
-	    	while(activeConn.isRunning())
-	    	{
-	    		callback.SimpleSleep(100);
-	    	}
+	    	try
+			{
+				activeConn.getThread().join();
+			} catch (InterruptedException e)
+			{
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
     	}
     	
     	if(connState.GetState() != ConnectionState.ESTABLISHED)
@@ -99,10 +106,15 @@ class S_StreamSocket
     		sendTask.setRunnable(false);
 
     		// wait for both tasks to stop
-    		while(recvTask.isRunning() || sendTask.isRunning())
-    		{
-    			callback.SimpleSleep(100);
-    		}
+    		try
+			{
+    			recvTask.getThread().join();
+				sendTask.getThread().join();
+			} catch (InterruptedException e)
+			{
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
     		
     		throw new SocketException();
     	}
@@ -112,7 +124,9 @@ class S_StreamSocket
     		socket.T_setSoTimeout(recvTimeout);
     		
     		discardTask.setRunnable(true);
-    		new Thread(discardTask).start();
+    		discardTask.setThread(new Thread(discardTask));
+    		discardTask.getThread().start();
+    		
     	}
     	
     	System.out.println("Client connected after : " + (100-retry) + " retries");
@@ -126,8 +140,10 @@ class S_StreamSocket
     	recvTask.setRunnable(true);
     	sendTask.setRunnable(true);
     	
-    	new Thread(recvTask).start();
-    	new Thread(sendTask).start();
+    	recvTask.setThread(new Thread(recvTask));
+    	recvTask.getThread().start();
+    	sendTask.setThread(new Thread(sendTask));
+    	sendTask.getThread().start();
     	
     	if(recvTimeout > 0)
     	{
@@ -147,17 +163,23 @@ class S_StreamSocket
     		sendTask.setRunnable(false);
 
     		// wait for both tasks to stop
-    		while(recvTask.isRunning() || sendTask.isRunning())
-    		{
-    			callback.SimpleSleep(100);
-    		}
+			try
+			{
+				recvTask.getThread().join();
+				sendTask.getThread().join();
+			} catch (InterruptedException e)
+			{
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
     		
 			throw new SocketException();    		
     	}
     	else
     	{
     		discardTask.setRunnable(true);
-    		new Thread(discardTask).start();
+    		discardTask.setThread(new Thread(discardTask));
+    		discardTask.getThread().start();
     	}
     	
     	return remoteAddr;
@@ -264,11 +286,14 @@ class S_StreamSocket
     			else if(activeConn != null && ((AcceptTask)activeConn).synHdr.checksum.toInt() != header.checksum.toInt())
     			{
     				activeConn.setRunnable(false);
-    				while(activeConn.isRunning())
-    				{
-    					SimpleSleep(100);
-    				}
-    				
+    				try
+					{
+						activeConn.getThread().join();
+					} catch (InterruptedException e)
+					{
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
     				activeConn = null;
     			}
     			

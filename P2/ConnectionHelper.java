@@ -13,7 +13,18 @@ abstract class ConnectionHelperTask implements Runnable
 	protected ConnectionHelper connHelper = null;
 	protected S_StreamSocket.TaskCallback callback = null;
 	private boolean running = false;
+	private Thread thread;
 	
+	public Thread getThread()
+	{
+		return thread;
+	}
+
+	public void setThread(Thread thread)
+	{
+		this.thread = thread;
+	}
+
 	public abstract void performTask();
 	
 	public ConnectionHelperTask (ConnectionHelper helper, S_StreamSocket.TaskCallback callback)

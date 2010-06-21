@@ -5,11 +5,14 @@ import ece428.socket.*;
 class S_StreamSocket
 {
     /* Data members */
-
+	List<TCPHeader> recvList = null;
+	List<TCPHeader> sendList = null;
+	T_DatagramSocket socket = null;
+	
     /* Constructor. Binds socket to addr */
     public S_StreamSocket(InetSocketAddress addr) /* throws ... */
     {
-	/* Your code here */
+    	
     }
 
     /* Receive timeout in milliseconds */
@@ -55,6 +58,18 @@ class S_StreamSocket
     public void S_close() /* throws ... */
     {
 	/* Your code here */
+    }
+    
+    class TaskCallback
+    {
+    	void OnTCPHeaderRecieved(TCPHeader header)
+    	{
+    		
+    	}
+    	void OnTCPHeaderSent(TCPHeader header)
+    	{
+    		
+    	}
     }
 }
 

@@ -131,7 +131,7 @@ class ReceiveTask extends ConnectionHelperTask
 		{
 			synchronized(receiveList)
 			{
-				System.out.println("something received");
+				//System.out.println("something received");
 				receiveList.add(recvHeader);
 			}
 			callback.OnTCPHeaderRecieved(recvHeader);
@@ -232,7 +232,7 @@ class ConnectTask extends Connection
 			retry--;
 			
 			callback.PerformTCPSend(synHdr);
-			callback.SimpleSleep(2000);
+			callback.SimpleSleep(100);
 			synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
 			System.out.println("trying to get syn+ack from server");
 		}
@@ -243,7 +243,7 @@ class ConnectTask extends Connection
 			callback.OnConnectionFailed(this);
 			return;
 		}
-		else if(synAckHdr.checksum.toInt() == synHdr.checksum.toInt())
+		else if(synAckHdr.seqNum.toInt() == -1)
 		{
 			System.out.println("got a reply from server that it is connected to me");
 			// server seems to be connected to me..just accept it
@@ -286,7 +286,6 @@ class ConnectTask extends Connection
 			return;
 		}
 		
-		System.out.println("client is connected");
 		this.isConnected = true;		
 		callback.OnConnectionSucceeded(this);
 	}
@@ -333,7 +332,7 @@ class AcceptTask extends Connection
 		{
 			retry--;
 			callback.PerformTCPSend(synAckHdr);
-			callback.SimpleSleep(1000);
+			callback.SimpleSleep(100);
 			ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
 		}
 		

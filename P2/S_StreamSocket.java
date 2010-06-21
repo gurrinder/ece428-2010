@@ -100,8 +100,11 @@ class S_StreamSocket
 			}
     	}
     	
+    	System.out.println("outside the trying");
+    	
     	if(connState.GetState() != ConnectionState.ESTABLISHED)
     	{
+    		System.out.println("we failed on connect");
     		recvTask.setRunnable(false);
     		sendTask.setRunnable(false);
 
@@ -120,16 +123,17 @@ class S_StreamSocket
     	}
     	else
     	{
-    		// reset the timeout
-    		socket.T_setSoTimeout(recvTimeout);
+    		System.out.println("we succeeeded on connect");
     		
+    		System.out.println("starting the discard thread");
     		discardTask.setRunnable(true);
     		discardTask.setThread(new Thread(discardTask));
     		discardTask.getThread().start();
     		
+    		System.out.println("discard thread started");
     	}
-    	
-    	System.out.println("Client connected after : " + (100-retry) + " retries");
+
+    	System.out.println("Client connected after : " + (100-retry) + " try(s)");
     }
 
     /* Used by server to accept a new connection */
@@ -193,8 +197,10 @@ class S_StreamSocket
 
     /* Used to receive data. Max chunk of data received is len. 
      * The actual number of bytes received is returned */
-    public int S_receive(byte[] buf, int len) /* throws ... */
+    public int S_receive(byte[] buf, int len) throws SocketException
     {
+		socket.T_setSoTimeout(recvTimeout);
+		
     	return 0;
 	/* Your code here */
     }
@@ -278,8 +284,10 @@ class S_StreamSocket
     					&& header.senderAddr.getHostName().equals(activeConn.destAddress.getHostName())
     					&& header.senderAddr.getPort() == activeConn.destAddress.getPort())
     			{
-    				System.out.println("letting client know i am already conencted to him");
+    				System.out.println("letting client know i am already connected to him");
     				header.ack = 1;
+    				header.ackNum = DWord.createFromInt(header.seqNum.toInt() + 1);
+    				header.seqNum = DWord.createFromInt(-1);
     				header.checksum = Word.createFromInt(TCPHeaderUtil.calculateCheckSum(header));
     				PerformTCPSend(header);
     			}
@@ -332,10 +340,12 @@ class S_StreamSocket
 
     	void OnConnectionSucceeded(Connection conn) 
 		{
+    		System.out.println("Connection Succeeded");
     		connState.SetState(ConnectionState.ESTABLISHED);
     		
     		remoteAddr = conn.destAddress;
     		conn.setRunnable(false);
+    		System.out.println("Exiting onConnSucceeded");
 		}
 
     	void PerformTCPSend(TCPHeader hdr)
@@ -378,10 +388,6 @@ class S_StreamSocket
 	    			if((type == hdrType.type) && (hdr.ackNum.toInt() == hdrType.ackNum))
 	    			{
 	    				recvList.remove(i);
-	    				if(hdr == null)
-	    				{
-	    					System.out.println("NUll header>>>");
-	    				}
 	    				return hdr;
 	    			}
 	    		}

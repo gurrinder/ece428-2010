@@ -346,14 +346,6 @@ class S_StreamSocket
     		
     		remoteAddr = conn.destAddress;
     		conn.setRunnable(false);
-    		try
-			{
-				conn.getThread().join();
-			} catch (InterruptedException e)
-			{
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
     		System.out.println("Exiting onConnSucceeded");
 		}
 

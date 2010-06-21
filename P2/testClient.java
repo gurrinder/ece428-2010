@@ -15,11 +15,13 @@ public class testClient
 	public static void main(String[] args) throws IOException
 	{
 		// TODO Auto-generated method stub
+		System.out.println(Thread.activeCount());
 		InetSocketAddress add = new InetSocketAddress("localhost", 12346);
 		InetSocketAddress to = new InetSocketAddress("localhost", 12345);
 		S_StreamSocket s = new S_StreamSocket(add);
 		s.S_connect(to);
 		System.out.println(s.connState.GetState());
+		System.out.println(Thread.activeCount());
 	}
 
 }

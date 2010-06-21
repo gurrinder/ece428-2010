@@ -12,6 +12,7 @@ abstract class ConnectionHelperTask implements Runnable
 	private boolean bRun = true;
 	protected ConnectionHelper connHelper = null;
 	protected S_StreamSocket.TaskCallback callback = null;
+	private boolean running = false;
 	
 	public abstract void performTask();
 	
@@ -28,7 +29,7 @@ abstract class ConnectionHelperTask implements Runnable
     
     public boolean isRunning()
     {
-    	return bRun;
+    	return bRun || running;
     }
     
     @Override
@@ -36,8 +37,10 @@ abstract class ConnectionHelperTask implements Runnable
 	{
 		while(bRun)
 		{
+			running = true;
 			performTask();
 		}
+		running = false;
 	}
 }
 
@@ -96,7 +99,7 @@ class ReceiveTask extends ConnectionHelperTask
 		TCPHeader recvHeader = null;
 		try 
 		{
-			recvHeader = connHelper.recv(TCPHeader.AGGREGATED_HEADER_SIZE);
+			recvHeader = connHelper.recv(TCPHeader.AGGREGATED_HEADER_SIZE);			
 			if(recvHeader.checksum.toInt() != TCPHeaderUtil.calculateCheckSum(recvHeader))
 			{
 				recvHeader = null;
@@ -110,7 +113,7 @@ class ReceiveTask extends ConnectionHelperTask
 		}
 		catch (IOException e)
 		{
-			System.err.println("ReceiveTask::performTask - IOException: " + e.getMessage());
+			//System.err.println("ReceiveTask::performTask - IOException: " + e.getMessage());
 		}
 		
 		if(recvHeader != null)
@@ -211,7 +214,7 @@ class ConnectTask extends Connection
 		synHdr.senderAddr = destAddress;
 		// send a syn
 		callback.PerformTCPSend(synHdr);
-		callback.WaitForPacketRecvTimeout();
+		callback.WaitForRetransmitTimeout();
 		synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
 		
 		if(synAckHdr == null)
@@ -275,7 +278,7 @@ class AcceptTask extends Connection
 		synAckHdr.senderAddr = destAddress;
 		callback.PerformTCPSend(synAckHdr);
 		
-		callback.WaitForPacketRecvTimeout();
+		callback.WaitForRetransmitTimeout();
 		ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
 		if(ackHdr == null)
 		{

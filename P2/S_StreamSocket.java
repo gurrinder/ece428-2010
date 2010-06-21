@@ -12,7 +12,7 @@ class S_StreamSocket
 	int srcWindowSize = 1000;
 	int destWindowSize = 1000;
 	int recvTimeout = 0;
-	int retransmitTimeout = 10000; // 10 seconds
+	int retransmitTimeout = 1000; // 10 seconds
 	ConnectionHelper connHelper = null;
 	ConnectionState connState = null;
 	Connection activeConn = null;
@@ -62,14 +62,17 @@ class S_StreamSocket
     /* Used by client to connect to server */
     public void S_connect(InetSocketAddress serverAddr) throws SocketException
     {
-    	int retry = 20; // we will retry setting up connection 20 times
+    	int retry = 100; // we will retry setting up connection 100 times
+    	
+    	// for the handshake purpose, we set the timeout to be different
+    	socket.T_setSoTimeout(retransmitTimeout);
     	
     	// start the receiving and sending tasks
     	recvTask.setRunnable(true);
     	sendTask.setRunnable(true);
     	
-    	new Thread(recvTask).run();
-    	new Thread(sendTask).run();
+    	new Thread(recvTask).start();
+    	new Thread(sendTask).start();
     	
     	while(retry > 0 && connState.GetState() != ConnectionState.ESTABLISHED)
     	{
@@ -81,33 +84,52 @@ class S_StreamSocket
     		
 	    	activeConn = new ConnectTask(connHelper, callback, localAddr, serverAddr);
 	    	activeConn.setRunnable(true);
-	    	new Thread(activeConn).run();
+	    	new Thread(activeConn).start();
 	    	
 	    	// wait for the connection to succeed or fail
-	    	while(activeConn.isRunning());
+	    	while(activeConn.isRunning())
+	    	{
+	    		callback.SimpleSleep(100);
+	    	}
     	}
     	
     	if(connState.GetState() != ConnectionState.ESTABLISHED)
     	{
+    		recvTask.setRunnable(false);
+    		sendTask.setRunnable(false);
+
+    		// wait for both tasks to stop
+    		while(recvTask.isRunning() || sendTask.isRunning())
+    		{
+    			callback.SimpleSleep(100);
+    		}
+    		
     		throw new SocketException();
     	}
     	else
     	{
+    		// reset the timeout
+    		socket.T_setSoTimeout(recvTimeout);
+    		
     		discardTask.setRunnable(true);
-    		new Thread(discardTask).run();
+    		new Thread(discardTask).start();
     	}
     }
 
     /* Used by server to accept a new connection */
     /* Returns the IP & port of the client */
     public InetSocketAddress S_accept() throws IOException, SocketTimeoutException
-    {        
+    {   
+    	// clear the buffers
+    	recvList.clear();
+    	sendList.clear();
+    	
     	// start the receiving and sending tasks
     	recvTask.setRunnable(true);
     	sendTask.setRunnable(true);
     	
-    	new Thread(recvTask).run();
-    	new Thread(sendTask).run();
+    	new Thread(recvTask).start();
+    	new Thread(sendTask).start();
     	
     	if(recvTimeout > 0)
     	{
@@ -115,17 +137,29 @@ class S_StreamSocket
     	}
     	else
     	{
-    		while(connState.GetState() != ConnectionState.ESTABLISHED);
+    		while(connState.GetState() != ConnectionState.ESTABLISHED)
+    		{
+    			callback.SimpleSleep(100);
+    		}
     	}
     	
     	if(remoteAddr == null)
     	{
+    		recvTask.setRunnable(false);
+    		sendTask.setRunnable(false);
+
+    		// wait for both tasks to stop
+    		while(recvTask.isRunning() || sendTask.isRunning())
+    		{
+    			callback.SimpleSleep(100);
+    		}
+    		
 			throw new SocketTimeoutException();    		
     	}
     	else
     	{
     		discardTask.setRunnable(true);
-    		new Thread(discardTask).run();
+    		new Thread(discardTask).start();
     	}
     	
     	return remoteAddr;
@@ -180,7 +214,7 @@ class S_StreamSocket
 	    			if(wait)
 	    			{
 	    				threadWaitingOnRecv = Thread.currentThread();
-			    		threadWaitingOnRecv.wait();
+			    		threadWaitingOnRecv.suspend();
 			    		threadWaitingOnRecv = null;
 	    			}	    			
 	    		}
@@ -195,11 +229,22 @@ class S_StreamSocket
 			}
     	}
     	
+    	void SimpleSleep(int millis)
+    	{
+    		try
+    		{
+    			Thread.sleep(millis);
+    		}
+    		catch (InterruptedException e) 
+			{
+				e.printStackTrace();
+			}
+    	}
     	synchronized void OnTCPHeaderRecieved(TCPHeader header)
     	{
     		if(threadWaitingOnRecv != null)
     		{
-    			threadWaitingOnRecv.notify();
+    			threadWaitingOnRecv.resume();
     		}
     		
     		// a new connection has arrived
@@ -213,12 +258,15 @@ class S_StreamSocket
     			if(activeConn != null)
     			{
     				activeConn.setRunnable(false);
-    				while(activeConn.isRunning());
+    				while(activeConn.isRunning())
+    				{
+    					SimpleSleep(100);
+    				}
     			}
     			
     			activeConn = new AcceptTask(connHelper, callback, localAddr, header);
     			activeConn.setRunnable(true);
-    			new Thread(activeConn).run();
+    			new Thread(activeConn).start();
     		}
     	}
     	

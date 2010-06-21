@@ -1,4 +1,7 @@
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 
 
 public class testServer
@@ -6,23 +9,17 @@ public class testServer
 
 	/**
 	 * @param args
+	 * @throws IOException 
+	 * @throws SocketTimeoutException 
 	 */
-	public static void main(String[] args)
+	public static void main(String[] args) throws SocketTimeoutException, IOException
 	{
 		// TODO Auto-generated method stub
-		InetSocketAddress add;
-		add = InetSocketAddress.createUnresolved("localhost", 12345);
+		InetSocketAddress add = new InetSocketAddress("localhost", 12345);
 		S_StreamSocket s = new S_StreamSocket(add);
-		
-		byte[] buf = new byte [50];
-		int ret;
+		//s.S_setSoTimeout(10000);
 		s.S_accept();
-		while ((ret = s.S_receive(buf, 50)) > 0)
-		{
-			byte[] buf2 = buf.toString().toUpperCase().getBytes();
-			s.S_send(buf2, buf2.length);
-		}
-		s.S_close();
+		System.out.println(s.connState.GetState());
 	}
 
 }

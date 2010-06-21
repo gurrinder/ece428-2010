@@ -101,6 +101,17 @@ class TCPHeader
 	// TOTAL Length of TCP Header at all time = 5 * 4 + 528 = 548 
 	// UDP Header will add an extra 8 bytes of header = 548 + 8 = 556 (the lowest MMS supported)
 	
+	void setData(byte[] dat)
+	{
+		data = new byte[528];
+		assert(dat.length <= data.length);
+
+		for(int i = 0; i < dat.length; i++)
+		{
+			data[i] = dat[i];
+		}
+	}
+	
 	byte[] toBytes()
 	{
 		int index = 0;
@@ -226,7 +237,7 @@ public class TCPHeaderUtil
 		
 		// put the old checksum value back
 		hdr.checksum = Word.createFromInt(oldchecksum);
-		return checksum;
+		return Word.createFromInt(checksum).toInt();
 	}
 	
 	static void fillCheckSumForHeader(TCPHeader hdr)
@@ -256,7 +267,7 @@ public class TCPHeaderUtil
 		hdr.syn = (byte) (syn ? 1 : 0);
 		hdr.fin = (byte) (fin ? 1 : 0);
 		hdr.ack = (byte) (ack ? 1 : 0);
-		hdr.data = data;
+		hdr.setData(data);
 		hdr.windowSize = Word.createFromInt(windowSize);
 		
 		fillCheckSumForHeader(hdr);

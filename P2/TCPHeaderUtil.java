@@ -66,6 +66,8 @@ class TCPHeader
 	
 	// this value is not used in actual transmission
 	public InetSocketAddress senderAddr = null;
+	// this value is not used
+	public long recvTime = 0;
 	
 	/* <!-----------------------------------------------------------
 	/* ---------------------- TCP HEADER --------------------------- 
@@ -174,6 +176,23 @@ class TCPHeader
 		}
 		hdr.data = data;
 		return hdr;
+	}
+}
+
+class TCPHeaderType
+{
+	public static final int DEFAULT						= 0x00000000;	
+	public static final int SYN							= 0x00000001;
+	public static final int ACK							= 0x00000002;
+	public static final int FIN							= 0x00000004;
+	
+	public int type										= DEFAULT;
+	public long ackNum									= 0;
+	
+	public TCPHeaderType(int type, long ackNum)
+	{
+		this.type = type;
+		this.ackNum = ackNum;
 	}
 }
 

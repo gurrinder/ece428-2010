@@ -1,7 +1,9 @@
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetSocketAddress;
+import java.util.Calendar;
 import java.util.List;
+import java.util.Random;
 
 import ece428.socket.T_DatagramSocket;
 
@@ -24,12 +26,56 @@ abstract class ConnectionHelperTask implements Runnable
 		bRun = runnable;
 	}
     
+    public boolean isRunning()
+    {
+    	return bRun;
+    }
+    
     @Override
 	public void run()
 	{
 		while(bRun)
 		{
 			performTask();
+		}
+	}
+}
+
+class DiscardPacketTask extends ConnectionHelperTask
+{
+	private List<TCPHeader> receiveList = null;
+
+	public DiscardPacketTask(ConnectionHelper helper, S_StreamSocket.TaskCallback callback, List<TCPHeader> receiveList) 
+	{
+		super(helper, callback);
+		this.receiveList = receiveList;
+	}
+	
+	public void performTask()
+	{
+		long curTime = Calendar.getInstance().getTimeInMillis();
+		long diff = 0;
+		
+		try 
+		{
+			Thread.sleep(callback.GetRetransmitTimeout());
+		} 
+		catch (InterruptedException e) 
+		{
+			e.printStackTrace();
+		}
+		
+		synchronized(receiveList)
+		{
+			for(int i = 0; i < receiveList.size(); i++)
+			{
+				diff = curTime - receiveList.get(i).recvTime;
+				if(diff >= callback.GetRetransmitTimeout())
+				{
+					receiveList.remove(i);
+					i--;
+				}
+			}
 		}
 	}
 }
@@ -51,6 +97,16 @@ class ReceiveTask extends ConnectionHelperTask
 		try 
 		{
 			recvHeader = connHelper.recv(TCPHeader.AGGREGATED_HEADER_SIZE);
+			if(recvHeader.checksum.toInt() != TCPHeaderUtil.calculateCheckSum(recvHeader))
+			{
+				recvHeader = null;
+			}
+			else
+			{
+				// this time field is used to tell which packets to drop since they have been past
+				// their receiving time
+				recvHeader.recvTime = Calendar.getInstance().getTimeInMillis();
+			}
 		}
 		catch (IOException e)
 		{
@@ -63,7 +119,6 @@ class ReceiveTask extends ConnectionHelperTask
 			{
 				receiveList.add(recvHeader);
 			}
-			
 			callback.OnTCPHeaderRecieved(recvHeader);
 		}
 	}
@@ -106,6 +161,130 @@ class SendTask extends ConnectionHelperTask
 				}
 			}
 		}
+	}
+}
+
+abstract class Connection extends ConnectionHelperTask
+{
+	public boolean isConnected = false;
+	public InetSocketAddress sourceAddress = null;
+	public InetSocketAddress destAddress = null;
+	
+	public Connection(ConnectionHelper helper, S_StreamSocket.TaskCallback callback) 
+	{
+		super(helper, callback);
+	}
+}
+
+// represents a connection between source and destination
+class ConnectTask extends Connection
+{	
+	public ConnectTask(
+			ConnectionHelper helper, 
+			S_StreamSocket.TaskCallback callback, 
+			InetSocketAddress srcAddr,
+			InetSocketAddress destAddr) 
+	{
+		super(helper, callback);
+		sourceAddress = srcAddr;
+		destAddress = destAddr;
+	}
+
+	@Override
+	public void performTask() 
+	{
+		int seqNum = new Random().nextInt(0x0FFFFFFF);
+		byte[] data = new byte[0];
+		TCPHeader synAckHdr = null;
+		TCPHeader ackHdr = null;
+		TCPHeader synHdr = TCPHeaderUtil.createTCPHeader(
+				sourceAddress.getPort(), 
+				destAddress.getPort(), 
+				seqNum, 
+				0, 
+				true, 
+				false, 
+				false, 
+				callback.GetDestWindowSize(), 
+				data);
+		
+		synHdr.senderAddr = destAddress;
+		// send a syn
+		callback.PerformTCPSend(synHdr);
+		callback.WaitForPacketRecvTimeout();
+		synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
+		
+		if(synAckHdr == null)
+		{
+			callback.OnConnectionFailed(this);
+			return;
+		}
+		
+		ackHdr = TCPHeaderUtil.createTCPHeader(
+				sourceAddress.getPort(), 
+				destAddress.getPort(), 
+				synAckHdr.ackNum.toInt(), 
+				synAckHdr.seqNum.toInt() + 1, 
+				false, 
+				false, 
+				true, 
+				callback.GetDestWindowSize(), 
+				data);
+		ackHdr.senderAddr = destAddress;
+		callback.PerformTCPSend(ackHdr);
+
+		this.isConnected = true;		
+		callback.OnConnectionSucceeded(this);
+	}
+}
+
+//represents a connection between source and destination
+class AcceptTask extends Connection
+{	
+	private TCPHeader synHdr = null;
+	
+	public AcceptTask(
+			ConnectionHelper helper, 
+			S_StreamSocket.TaskCallback callback, 
+			InetSocketAddress srcAddr, 
+			TCPHeader synHdr) 
+	{
+		super(helper, callback);
+		this.sourceAddress = srcAddr;
+		this.synHdr = synHdr;
+		this.destAddress = synHdr.senderAddr;
+	}
+
+	@Override
+	public void performTask() 
+	{
+		int seqNum = new Random().nextInt(0x0FFFFFFF);
+		byte[] data = new byte[0];
+		TCPHeader ackHdr = null;
+		
+		TCPHeader synAckHdr = TCPHeaderUtil.createTCPHeader(
+				sourceAddress.getPort(), 
+				destAddress.getPort(), 
+				seqNum, 
+				synHdr.seqNum.toInt() + 1, 
+				true, 
+				false, 
+				true, 
+				callback.GetSourceWindowSize(), 
+				data);
+		synAckHdr.senderAddr = destAddress;
+		callback.PerformTCPSend(synAckHdr);
+		
+		callback.WaitForPacketRecvTimeout();
+		ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
+		if(ackHdr == null)
+		{
+			callback.OnConnectionFailed(this);
+			return;
+		}
+		
+		this.isConnected = true;		
+		callback.OnConnectionSucceeded(this);
 	}
 }
 

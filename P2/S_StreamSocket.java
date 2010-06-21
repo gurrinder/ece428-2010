@@ -81,11 +81,7 @@ class S_StreamSocket
     	while(retry > 0 && connState.GetState() != ConnectionState.ESTABLISHED)
     	{
         	retry--;
-
-        	// clear the buffers
-        	recvList.clear();
-        	sendList.clear();
-    		
+        	System.out.println("client connecting..");
 	    	activeConn = new ConnectTask(connHelper, callback, localAddr, serverAddr);
 	    	activeConn.setRunnable(true);
 	    	new Thread(activeConn).start();
@@ -118,16 +114,14 @@ class S_StreamSocket
     		discardTask.setRunnable(true);
     		new Thread(discardTask).start();
     	}
+    	
+    	System.out.println("Client connected after : " + (100-retry) + " retries");
     }
 
     /* Used by server to accept a new connection */
     /* Returns the IP & port of the client */
     public InetSocketAddress S_accept() throws IOException, SocketTimeoutException
-    {   
-    	// clear the buffers
-    	recvList.clear();
-    	sendList.clear();
-    	
+    {    	
     	// start the receiving and sending tasks
     	recvTask.setRunnable(true);
     	sendTask.setRunnable(true);
@@ -241,7 +235,7 @@ class S_StreamSocket
     		}
     		catch (InterruptedException e) 
 			{
-				e.printStackTrace();
+				
 			}
     	}
     	synchronized void OnTCPHeaderRecieved(TCPHeader header)
@@ -259,18 +253,23 @@ class S_StreamSocket
     			
     			assert(header != null);
     			
-    			if(activeConn != null)
+    			if(activeConn != null && ((AcceptTask)activeConn).synHdr.checksum.toInt() != header.checksum.toInt())
     			{
     				activeConn.setRunnable(false);
     				while(activeConn.isRunning())
     				{
     					SimpleSleep(100);
     				}
+    				
+    				activeConn = null;
     			}
-    			
-    			activeConn = new AcceptTask(connHelper, callback, localAddr, header);
-    			activeConn.setRunnable(true);
-    			new Thread(activeConn).start();
+    			// create a new connection
+    			if(activeConn == null)
+    			{
+					activeConn = new AcceptTask(connHelper, callback, localAddr, header);
+	    			activeConn.setRunnable(true);
+	    			new Thread(activeConn).start();
+    			}
     		}
     	}
     	
@@ -285,6 +284,16 @@ class S_StreamSocket
     		conn.setRunnable(false);
     		
     		remoteAddr = null;
+    		
+        	// clear the buffers
+    		synchronized(recvList)
+    		{
+	        	recvList.clear();
+    		}
+    		synchronized(sendList)
+    		{
+    			sendList.clear();
+    		}
     	}
 
     	void OnConnectionSucceeded(Connection conn) 
@@ -328,13 +337,17 @@ class S_StreamSocket
 	    		for(int i = 0; i < recvList.size(); i++)
 	    		{
 	    			hdr = recvList.get(i);
-	    			type += hdr.ack == 1 ? (type | TCPHeaderType.ACK) : 0;
-	    			type += hdr.syn == 1 ? (type | TCPHeaderType.SYN) : 0;
-	    			type += hdr.fin == 1 ? (type | TCPHeaderType.FIN) : 0;
+	    			type += hdr.ack == 1 ? TCPHeaderType.ACK : 0;
+	    			type += hdr.syn == 1 ? TCPHeaderType.SYN : 0;
+	    			type += hdr.fin == 1 ? TCPHeaderType.FIN : 0;
 	    			
 	    			if((type == hdrType.type) && (hdr.ackNum.toInt() == hdrType.ackNum))
 	    			{
 	    				recvList.remove(i);
+	    				if(hdr == null)
+	    				{
+	    					System.out.println("NUll header>>>");
+	    				}
 	    				return hdr;
 	    			}
 	    		}

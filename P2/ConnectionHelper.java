@@ -43,7 +43,7 @@ abstract class ConnectionHelperTask implements Runnable
     	return bRun || running;
     }
     
-    @Override
+
 	public void run()
 	{
 		while(bRun)
@@ -131,7 +131,7 @@ class ReceiveTask extends ConnectionHelperTask
 		{
 			synchronized(receiveList)
 			{
-				//System.out.println("something received");
+				//////System.out.println("something received");
 				receiveList.add(recvHeader);
 			}
 			callback.OnTCPHeaderRecieved(recvHeader);
@@ -205,7 +205,7 @@ class ConnectTask extends Connection
 		destAddress = destAddr;
 	}
 	
-	@Override
+
 	public void performTask() 
 	{
 		int seqNum = new Random().nextInt(0x0FFFFFFF);
@@ -234,18 +234,18 @@ class ConnectTask extends Connection
 			callback.PerformTCPSend(synHdr);
 			callback.SimpleSleep(10);
 			synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
-			System.out.println("trying to get syn+ack from server");
+			////System.out.println("trying to get syn+ack from server");
 		}
 		
 		if(synAckHdr == null)
 		{
-			System.out.println("we failed to get syn+ack from server");
+			////System.out.println("we failed to get syn+ack from server");
 			callback.OnConnectionFailed(this);
 			return;
 		}
 		else if(synAckHdr.seqNum.toInt() == -1)
 		{
-			System.out.println("got a reply from server that it is connected to me");
+			////System.out.println("got a reply from server that it is connected to me");
 			// server seems to be connected to me..just accept it
 			this.isConnected = true;		
 			callback.OnConnectionSucceeded(this);
@@ -269,7 +269,7 @@ class ConnectTask extends Connection
 		// we now send the last ack a number of times (hopefully server gets atleast one of them)
 		while(retry > 0)
 		{
-			System.out.println("trying to send ack back to server");
+			////System.out.println("trying to send ack back to server");
 			retry--;
 			callback.SimpleSleep(10);
 			callback.PerformTCPSend(ackHdr);
@@ -281,7 +281,7 @@ class ConnectTask extends Connection
 		ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, synAckHdr.seqNum.toInt() + 1));
 		if(ackHdr == null)
 		{
-			System.out.println("we did not know if server got last ack back.failed");
+			////System.out.println("we did not know if server got last ack back.failed");
 			callback.OnConnectionFailed(this);
 			return;
 		}
@@ -308,7 +308,7 @@ class AcceptTask extends Connection
 		this.destAddress = synHdr.senderAddr;
 	}
 
-	@Override
+
 	public void performTask() 
 	{
 		int retry = 30;

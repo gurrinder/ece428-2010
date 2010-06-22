@@ -209,7 +209,6 @@ class S_StreamSocket
     			}
     		}
     	}
-    	
     }
     	return remoteAddr;
     }

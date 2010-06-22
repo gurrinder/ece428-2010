@@ -351,7 +351,7 @@ class S_StreamSocket
 		// wait for both tasks to stop
 		try
 		{
-			if(val)
+			if(val && recvTask.getThread() != null)
 			{
 				recvTask.getThread().join();
 			}

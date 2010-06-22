@@ -209,7 +209,7 @@ class ConnectTask extends Connection
 	public void performTask() 
 	{
 		int seqNum = new Random().nextInt(0x0FFFFFFF);
-		int retry = 30;
+		int retry = 100;
 		byte[] data = new byte[0];
 		TCPHeader synAckHdr = null;
 		TCPHeader ackHdr = null;
@@ -232,7 +232,7 @@ class ConnectTask extends Connection
 			retry--;
 			
 			callback.PerformTCPSend(synHdr);
-			callback.SimpleSleep(1000);
+			callback.SimpleSleep(10);
 			synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
 			System.out.println("trying to get syn+ack from server");
 		}
@@ -265,17 +265,17 @@ class ConnectTask extends Connection
 				data);
 		ackHdr.senderAddr = destAddress;
 		
-		retry = 30;
+		retry = 100;
 		// we now send the last ack a number of times (hopefully server gets atleast one of them)
 		while(retry > 0)
 		{
 			System.out.println("trying to send ack back to server");
 			retry--;
-			callback.SimpleSleep(1000);
+			callback.SimpleSleep(10);
 			callback.PerformTCPSend(ackHdr);
 		}
 		
-		callback.SimpleSleep(2000);
+		callback.SimpleSleep(500);
 		
 		// check if server got atleast one last ack
 		ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, synAckHdr.seqNum.toInt() + 1));
@@ -311,7 +311,7 @@ class AcceptTask extends Connection
 	@Override
 	public void performTask() 
 	{
-		int retry = 30;
+		int retry = 100;
 		int seqNum = new Random().nextInt(0x0FFFFFFF);
 		byte[] data = new byte[0];
 		TCPHeader ackHdr = null;
@@ -332,7 +332,7 @@ class AcceptTask extends Connection
 		{
 			retry--;
 			callback.PerformTCPSend(synAckHdr);
-			callback.SimpleSleep(1000);
+			callback.SimpleSleep(10);
 			ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
 		}
 		
@@ -342,12 +342,12 @@ class AcceptTask extends Connection
 			return;
 		}
 		
-		retry = 30;
+		retry = 100;
 		// we now send the ack for last ack back to client
 		while(retry > 0)
 		{
 			retry--;
-			callback.SimpleSleep(1000);
+			callback.SimpleSleep(10);
 			callback.PerformTCPSend(ackHdr);
 		}
 		

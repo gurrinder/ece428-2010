@@ -232,7 +232,7 @@ class ConnectTask extends Connection
 			retry--;
 			
 			callback.PerformTCPSend(synHdr);
-			callback.SimpleSleep(100);
+			callback.SimpleSleep(1000);
 			synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
 			System.out.println("trying to get syn+ack from server");
 		}
@@ -271,7 +271,7 @@ class ConnectTask extends Connection
 		{
 			System.out.println("trying to send ack back to server");
 			retry--;
-			callback.SimpleSleep(100);
+			callback.SimpleSleep(1000);
 			callback.PerformTCPSend(ackHdr);
 		}
 		
@@ -332,7 +332,7 @@ class AcceptTask extends Connection
 		{
 			retry--;
 			callback.PerformTCPSend(synAckHdr);
-			callback.SimpleSleep(100);
+			callback.SimpleSleep(1000);
 			ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
 		}
 		
@@ -347,7 +347,7 @@ class AcceptTask extends Connection
 		while(retry > 0)
 		{
 			retry--;
-			callback.SimpleSleep(100);
+			callback.SimpleSleep(1000);
 			callback.PerformTCPSend(ackHdr);
 		}
 		

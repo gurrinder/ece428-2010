@@ -247,7 +247,7 @@ class S_StreamSocket
 			packetHdr.senderAddr = this.remoteAddr;
 			sendSeqNum = (int) ((sendSeqNum + 528)%Math.pow(2, 31));
 			// send a syn
-			while(packetAckHdr == null)
+			while(!this.isClosing && packetAckHdr == null)
 			{
 				//System.out.println("Sending data : seqNum = " + sendSeqNum + " length = " + data.get(i).length);
 				callback.PerformTCPSend(packetHdr);
@@ -291,8 +291,49 @@ class S_StreamSocket
 			Thread.sleep(callback.GetRetransmitTimeout());
 			firstRecv = false;
 		}
+		TCPHeader hdr = null;
+		int totlen = 0;
 		
-    	return 0;
+		while (!this.isClosing && totlen < len)
+		{
+			if ((hdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(0, 0)))!= null)
+			{
+			for (int i  = 0; i < hdr.dataSize && i + totlen < len; i++)
+			{
+				buf[totlen + i] = hdr.data[i];
+			}
+			//System.out.println("yyyyy " +new String (hdr.data));
+			if (hdr.dataSize + totlen > len)
+			{
+				int diff = hdr.dataSize + totlen - len;
+				byte[] data = new byte [diff];
+				for (int i = 0; i < data.length; i++)
+				{
+					data[i] = hdr.data[hdr.dataSize+i-diff];
+				}
+				TCPHeader packetHdr = TCPHeaderUtil.createTCPHeader(
+						hdr.sourcePort.toInt(), 
+						hdr.destPort.toInt(), 
+						hdr.seqNum.toInt(), 
+						hdr.ackNum.toInt(), 
+						false, 
+						false, 
+						false, 
+						0, 
+						data);
+				//System.out.println("xxxxxx " +new String (data));
+				packetHdr.recvTime = Calendar.getInstance().getTimeInMillis();
+				callback.AddHeaderToRecvListAtHead(packetHdr);
+				totlen = len;
+				break;
+			}
+			else
+				totlen += hdr.dataSize;
+			}
+			else
+				callback.SimpleSleep(10);
+		}
+    	return totlen;
 	/* Your code here */
     }
 
@@ -390,7 +431,7 @@ class S_StreamSocket
     	sendTask = new SendTask(connHelper, callback, sendList);
     	discardTask = new DiscardPacketTask(connHelper, callback, recvList);
     	
-    	////System.out.println("successfully internal closed");
+    	//////System.out.println("successfully internal closed");
     	}
     }
     
@@ -486,12 +527,12 @@ class S_StreamSocket
     		// got ack
     		else if (header.syn == 0 && header.ack == 1 && header.fin == 0)
     		{
-    			////System.out.println("Got Ack seqNum = " + header.seqNum.toInt() + "ack = " + header.ackNum.toInt() + " length = " + header.dataSize);
+    			//////System.out.println("Got Ack seqNum = " + header.seqNum.toInt() + "ack = " + header.ackNum.toInt() + " length = " + header.dataSize);
     		}
     		// got data
     		else if (header.syn == 0 && header.ack == 0 && header.fin == 0)
         	{
-    			////System.out.println("Got Data seqNum = " + header.seqNum.toInt() + "ack = " + header.ackNum.toInt() + " length = " + header.dataSize + " dat = " + header.data[0]);
+    			//////System.out.println("Got Data seqNum = " + header.seqNum.toInt() + "ack = " + header.ackNum.toInt() + " length = " + header.dataSize + " dat = " + header.data[0]);
     		    TCPHeader packetHdr = TCPHeaderUtil.createTCPHeader(
     					header.destPort.toInt(), 
     					header.sourcePort.toInt(), 
@@ -507,7 +548,7 @@ class S_StreamSocket
     				this.lastSeqNum = header.seqNum.toInt();
     			else
     			{
-    				////System.out.println("                     delete header");
+    				//////System.out.println("                     delete header");
     				RemoveHeader(header);
     			}
     			PerformTCPSend(packetHdr);
@@ -523,7 +564,7 @@ class S_StreamSocket
     					&& header.senderAddr.getHostName().equals(activeConn.destAddress.getHostName())
     					&& header.senderAddr.getPort() == activeConn.destAddress.getPort())
     			{
-    				////System.out.println("letting client know i am already connected to him");
+    				//////System.out.println("letting client know i am already connected to him");
     				header.ack = 1;
     				header.ackNum = DWord.createFromInt(header.seqNum.toInt() + 1);
     				header.seqNum = DWord.createFromInt(-1);
@@ -588,12 +629,12 @@ class S_StreamSocket
 
     	void OnConnectionSucceeded(Connection conn) 
 		{
-    		////System.out.println("Connection Succeeded");
+    		//////System.out.println("Connection Succeeded");
     		connState.SetState(ConnectionState.ESTABLISHED);
     		
     		remoteAddr = conn.destAddress;
     		conn.setRunnable(false);
-    		////System.out.println("Exiting onConnSucceeded");
+    		//////System.out.println("Exiting onConnSucceeded");
 		}
 
     	void PerformTCPSend(TCPHeader hdr)

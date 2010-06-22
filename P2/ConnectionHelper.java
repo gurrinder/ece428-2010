@@ -232,20 +232,20 @@ class ConnectTask extends Connection
 			retry--;
 			
 			callback.PerformTCPSend(synHdr);
-			callback.SimpleSleep(100);
+			callback.SimpleSleep(10);
 			synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
-//			System.out.println("trying to get syn+ack from server");
+			System.out.println("trying to get syn+ack from server");
 		}
 		
 		if(synAckHdr == null)
 		{
-//			System.out.println("we failed to get syn+ack from server");
+			System.out.println("we failed to get syn+ack from server");
 			callback.OnConnectionFailed(this);
 			return;
 		}
 		else if(synAckHdr.seqNum.toInt() == -1)
 		{
-//			System.out.println("got a reply from server that it is connected to me");
+			System.out.println("got a reply from server that it is connected to me");
 			// server seems to be connected to me..just accept it
 			this.isConnected = true;		
 			callback.OnConnectionSucceeded(this);
@@ -265,7 +265,7 @@ class ConnectTask extends Connection
 				data);
 		ackHdr.senderAddr = destAddress;
 		
-		retry = 30;
+		retry = 100;
 		// we now send the last ack a number of times (hopefully server gets atleast one of them)
 		while(retry > 0)
 		{
@@ -275,7 +275,7 @@ class ConnectTask extends Connection
 			callback.PerformTCPSend(ackHdr);
 		}
 		
-		callback.SimpleSleep(500);
+		callback.SimpleSleep(1000);
 		
 		// check if server got atleast one last ack
 		ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, synAckHdr.seqNum.toInt() + 1));
@@ -311,7 +311,7 @@ class AcceptTask extends Connection
 	@Override
 	public void performTask() 
 	{
-		int retry = 100;
+		int retry = 30;
 		int seqNum = new Random().nextInt(0x0FFFFFFF);
 		byte[] data = new byte[0];
 		TCPHeader ackHdr = null;
@@ -332,7 +332,7 @@ class AcceptTask extends Connection
 		{
 			retry--;
 			callback.PerformTCPSend(synAckHdr);
-			callback.SimpleSleep(10);
+			callback.SimpleSleep(100);
 			ackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, seqNum + 1));
 		}
 		

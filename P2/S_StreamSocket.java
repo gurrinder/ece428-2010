@@ -26,6 +26,7 @@ class S_StreamSocket
 	boolean firstRecv = true;
 	boolean firstSend = true;
 	boolean isClosing = false;
+	int sendSeqNum = 0;
 	
     /* Constructor. Binds socket to addr */
     public S_StreamSocket(InetSocketAddress addr) throws SocketException
@@ -208,8 +209,8 @@ class S_StreamSocket
     		}
     	}
     	
+    }
     	return remoteAddr;
-    	}
     }
 
     /* Used to send data. len can be arbitrarily large or small */
@@ -223,10 +224,63 @@ class S_StreamSocket
 			firstSend = false;
 		}
 		
-	/* Your code here */
+		ArrayList<byte[]> data = new ArrayList<byte[]>();
+		while (buf.length > 0)
+		{
+			data.add(getSubArray(buf, 127));
+			buf = getRestArray(buf, 127);
+		}
+		for (int i = 0; i < data.size(); i++)
+		{
+			TCPHeader packetAckHdr = null;
+			TCPHeader packetHdr = TCPHeaderUtil.createTCPHeader(
+					this.localAddr.getPort(), 
+					this.remoteAddr.getPort(), 
+					sendSeqNum, 
+					0, 
+					false, 
+					false, 
+					false, 
+					0, 
+					data.get(i));
+			
+			packetHdr.senderAddr = this.remoteAddr;
+			sendSeqNum = (int) ((sendSeqNum + 528)%Math.pow(2, 31));
+			// send a syn
+			while(packetAckHdr == null)
+			{
+				System.out.println("Sending data : seqNum = " + sendSeqNum + " length = " + data.get(i).length);
+				callback.PerformTCPSend(packetHdr);
+				callback.SimpleSleep(10);
+				packetAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.ACK, (long) ((sendSeqNum+1)%Math.pow(2, 31))));
+				System.out.println("Sending data");
+			}
+		}
     }
 
-    /* Used to receive data. Max chunk of data received is len. 
+    private byte[] getRestArray(byte[] buf, int n)
+	{
+    	int len = 0;
+    	if (buf.length > n)
+    		len = buf.length-n;
+    	byte[] ret = new byte[len];
+    	for (int i = 0; i < len; i++)
+    		ret[i] = buf[n+i];
+		return ret;
+	}
+
+	private byte[] getSubArray(byte[] buf, int n)
+	{
+		// TODO Auto-generated method stub
+    	if (buf.length < n)
+    		n = buf.length;
+    	byte[] ret = new byte[n];
+    	for (int i = 0; i < n; i++)
+    		ret[i] = buf[i];
+		return ret;
+	}
+
+	/* Used to receive data. Max chunk of data received is len. 
      * The actual number of bytes received is returned */
     public int S_receive(byte[] buf, int len) throws Exception
     {		
@@ -339,6 +393,7 @@ class S_StreamSocket
     
     class TaskCallback
     {
+    	int lastSeqNum = -1;
     	void WaitForRetransmitTimeout()
     	{
     		try 
@@ -424,6 +479,35 @@ class S_StreamSocket
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
+    		}
+    		// got ack
+    		else if (header.syn == 0 && header.ack == 1 && header.fin == 0)
+    		{
+    			System.out.println("Got Ack seqNum = " + header.seqNum.toInt() + "ack = " + header.ackNum.toInt() + " length = " + header.dataSize);
+    		}
+    		// got data
+    		else if (header.syn == 0 && header.ack == 0 && header.fin == 0)
+        	{
+    			System.out.println("Got Data seqNum = " + header.seqNum.toInt() + "ack = " + header.ackNum.toInt() + " length = " + header.dataSize + " dat = " + header.data[0]);
+    		    TCPHeader packetHdr = TCPHeaderUtil.createTCPHeader(
+    					header.destPort.toInt(), 
+    					header.sourcePort.toInt(), 
+    					header.seqNum.toInt(), 
+    					(int) ((header.seqNum.toInt() + 528 + 1)%(Math.pow(2, 31))), 
+    					false, 
+    					false, 
+    					true, 
+    					0, 
+    					new byte[1]);
+    			packetHdr.senderAddr = header.senderAddr;
+    			if (this.lastSeqNum == -1 || this.lastSeqNum != header.seqNum.toInt())
+    				this.lastSeqNum = header.seqNum.toInt();
+    			else
+    			{
+    				System.out.println("                     delete header");
+    				RemoveHeader(header);
+    			}
+    			PerformTCPSend(packetHdr);
     		}
     		// a new connection has arrived
     		else if(header.syn == 1 && header.ack == 0 && header.fin == 0)
@@ -546,6 +630,21 @@ class S_StreamSocket
 	    		}
     		}
     		return null;
+    	}
+    	void RemoveHeader(TCPHeader hdr)
+    	{
+    		
+    		synchronized(recvList)
+    		{
+	    		for(int i = 0; i < recvList.size(); i++)
+	    		{
+	    			if (recvList.get(i).equals(hdr))
+	    			{
+	    				recvList.remove(i);
+	    				break;
+	    			}
+	    		}
+    		}
     	}
     }
 }

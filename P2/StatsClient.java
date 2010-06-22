@@ -26,9 +26,9 @@ public class StatsClient {
 	
 	/**
 	 * @param args
-	 * @throws SocketException 
+	 * @throws Exception 
 	 */
-	public static void main(String[] args) throws SocketException {
+	public static void main(String[] args) throws Exception {
 		InetSocketAddress serverAddress = new InetSocketAddress("localhost", 12345);
 		S_StreamSocket s = new S_StreamSocket(null);
 		s.S_connect(serverAddress);

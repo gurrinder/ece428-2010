@@ -90,7 +90,7 @@ class TCPHeader
 
 	// 32 bit seperator
 	public byte ack = 0;
-	public byte padding1 = 0;
+	public byte dataSize = 0;
 	public Word windowSize = Word.createFromInt(0);
 
 	/* -----------------------------------------------------------!> */
@@ -104,8 +104,8 @@ class TCPHeader
 	void setData(byte[] dat)
 	{
 		data = new byte[528];
-		assert(dat.length <= data.length);
-
+		assert(dat.length <= 128);
+		dataSize = (byte) dat.length;
 		for(int i = 0; i < dat.length; i++)
 		{
 			data[i] = dat[i];
@@ -135,7 +135,7 @@ class TCPHeader
 		hdr[index++] = syn;
 		hdr[index++] = fin;
 		hdr[index++] = ack;
-		hdr[index++] = padding1;
+		hdr[index++] = dataSize;
 		hdr[index++] = windowSize.byte1;
 		hdr[index++] = windowSize.byte2;
 
@@ -177,7 +177,7 @@ class TCPHeader
 		hdr.syn = hdrData[index++];
 		hdr.fin = hdrData[index++];
 		hdr.ack = hdrData[index++];
-		hdr.padding1 = hdrData[index++];
+		hdr.dataSize = hdrData[index++];
 		hdr.windowSize.byte1 = hdrData[index++];
 		hdr.windowSize.byte2 = hdrData[index++];
 		

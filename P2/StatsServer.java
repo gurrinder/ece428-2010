@@ -7,10 +7,9 @@ public class StatsServer {
 
 	/**
 	 * @param args
-	 * @throws IOException 
-	 * @throws SocketTimeoutException 
+	 * @throws Exception 
 	 */
-	public static void main(String[] args) throws SocketTimeoutException, IOException {
+	public static void main(String[] args) throws Exception {
 		InetSocketAddress serverSocket = new InetSocketAddress("localhost", 12345);
 		S_StreamSocket s = new S_StreamSocket(serverSocket);
 		s.S_accept();

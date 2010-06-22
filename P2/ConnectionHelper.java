@@ -209,7 +209,7 @@ class ConnectTask extends Connection
 	public void performTask() 
 	{
 		int seqNum = new Random().nextInt(0x0FFFFFFF);
-		int retry = 100;
+		int retry = 30;
 		byte[] data = new byte[0];
 		TCPHeader synAckHdr = null;
 		TCPHeader ackHdr = null;
@@ -232,20 +232,20 @@ class ConnectTask extends Connection
 			retry--;
 			
 			callback.PerformTCPSend(synHdr);
-			callback.SimpleSleep(10);
+			callback.SimpleSleep(100);
 			synAckHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN + TCPHeaderType.ACK, seqNum + 1));
-			System.out.println("trying to get syn+ack from server");
+//			System.out.println("trying to get syn+ack from server");
 		}
 		
 		if(synAckHdr == null)
 		{
-			System.out.println("we failed to get syn+ack from server");
+//			System.out.println("we failed to get syn+ack from server");
 			callback.OnConnectionFailed(this);
 			return;
 		}
 		else if(synAckHdr.seqNum.toInt() == -1)
 		{
-			System.out.println("got a reply from server that it is connected to me");
+//			System.out.println("got a reply from server that it is connected to me");
 			// server seems to be connected to me..just accept it
 			this.isConnected = true;		
 			callback.OnConnectionSucceeded(this);
@@ -265,7 +265,7 @@ class ConnectTask extends Connection
 				data);
 		ackHdr.senderAddr = destAddress;
 		
-		retry = 100;
+		retry = 30;
 		// we now send the last ack a number of times (hopefully server gets atleast one of them)
 		while(retry > 0)
 		{

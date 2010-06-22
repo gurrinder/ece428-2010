@@ -23,6 +23,9 @@ class S_StreamSocket
 	Thread threadWaitingOnRecv = null;
 	InetSocketAddress localAddr = null;
 	InetSocketAddress remoteAddr = null;
+	boolean firstRecv = true;
+	boolean firstSend = true;
+	boolean isClosing = false;
 	
     /* Constructor. Binds socket to addr */
     public S_StreamSocket(InetSocketAddress addr) throws SocketException
@@ -54,7 +57,7 @@ class S_StreamSocket
     public void S_setSoTimeout(int timeout) throws SocketException
     {
     	recvTimeout = timeout;
-    	socket.T_setSoTimeout(timeout);
+//		socket.T_setSoTimeout(timeout);
     }
 
     /* Details of local socket (IP & port) */
@@ -80,7 +83,7 @@ class S_StreamSocket
     	sendTask.setThread(new Thread(sendTask));
     	sendTask.getThread().start();
     	
-    	while(retry > 0 && connState.GetState() != ConnectionState.ESTABLISHED)
+    	while(retry > 0 && connState.GetState() != ConnectionState.ESTABLISHED && !isClosing)
     	{
         	retry--;
         	System.out.println("client connecting..");
@@ -93,7 +96,8 @@ class S_StreamSocket
 	    	try
 			{
 				activeConn.getThread().join();
-			} catch (InterruptedException e)
+			} 
+	    	catch (InterruptedException e)
 			{
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -102,7 +106,9 @@ class S_StreamSocket
     	
     	System.out.println("outside the trying");
     	
-    	if(connState.GetState() != ConnectionState.ESTABLISHED)
+    	synchronized(this)
+    	{
+    	if(connState.GetState() != ConnectionState.ESTABLISHED && !isClosing)
     	{
     		System.out.println("we failed on connect");
     		recvTask.setRunnable(false);
@@ -125,21 +131,29 @@ class S_StreamSocket
     	{
     		System.out.println("we succeeeded on connect");
     		
-    		System.out.println("starting the discard thread");
-    		discardTask.setRunnable(true);
-    		discardTask.setThread(new Thread(discardTask));
-    		discardTask.getThread().start();
-    		
-    		System.out.println("discard thread started");
+    		synchronized(discardTask)
+    		{
+    			if(connState.GetState() == ConnectionState.ESTABLISHED)
+    			{
+    	    		System.out.println("starting the discard thread");
+		    		discardTask.setRunnable(true);
+		    		discardTask.setThread(new Thread(discardTask));
+		    		discardTask.getThread().start();
+		    		System.out.println("discard thread started");
+    			}	    		
+    		}
     	}
 
     	System.out.println("Client connected after : " + (100-retry) + " try(s)");
+    	}
     }
 
     /* Used by server to accept a new connection */
     /* Returns the IP & port of the client */
     public InetSocketAddress S_accept() throws IOException, SocketTimeoutException
-    {    	
+    {
+    	socket.T_setSoTimeout(retransmitTimeout);
+    	
     	// start the receiving and sending tasks
     	recvTask.setRunnable(true);
     	sendTask.setRunnable(true);
@@ -155,12 +169,14 @@ class S_StreamSocket
     	}
     	else
     	{
-    		while(connState.GetState() != ConnectionState.ESTABLISHED)
+    		while(connState.GetState() != ConnectionState.ESTABLISHED && !isClosing)
     		{
     			callback.SimpleSleep(100);
     		}
     	}
     	
+    	synchronized(this)
+    	{
     	if(remoteAddr == null)
     	{
     		recvTask.setRunnable(false);
@@ -181,34 +197,144 @@ class S_StreamSocket
     	}
     	else
     	{
-    		discardTask.setRunnable(true);
-    		discardTask.setThread(new Thread(discardTask));
-    		discardTask.getThread().start();
+    		synchronized(discardTask)
+    		{
+    			if(connState.GetState() == ConnectionState.ESTABLISHED)
+    			{
+		    		discardTask.setRunnable(true);
+		    		discardTask.setThread(new Thread(discardTask));
+		    		discardTask.getThread().start();
+    			}
+    		}
     	}
     	
     	return remoteAddr;
+    	}
     }
 
     /* Used to send data. len can be arbitrarily large or small */
-    public void S_send(byte[] buf, int len) /* throws ... */
+    public void S_send(byte[] buf, int len) throws Exception
     {
+		if(firstSend)
+		{
+			Thread.sleep(callback.GetRetransmitTimeout());
+			Thread.sleep(callback.GetRetransmitTimeout());
+			Thread.sleep(callback.GetRetransmitTimeout());
+			firstSend = false;
+		}
+		
 	/* Your code here */
     }
 
     /* Used to receive data. Max chunk of data received is len. 
      * The actual number of bytes received is returned */
-    public int S_receive(byte[] buf, int len) throws SocketException
-    {
-		socket.T_setSoTimeout(recvTimeout);
+    public int S_receive(byte[] buf, int len) throws Exception
+    {		
+		if(firstRecv)
+		{
+			Thread.sleep(callback.GetRetransmitTimeout());
+			Thread.sleep(callback.GetRetransmitTimeout());
+			Thread.sleep(callback.GetRetransmitTimeout());
+			firstRecv = false;
+		}
 		
     	return 0;
 	/* Your code here */
     }
 
     /* To close the connection */
-    public void S_close() /* throws ... */
+    public void S_close() throws SocketException
     {
-	/* Your code here */
+    	if(connState.GetState() != ConnectionState.ESTABLISHED)
+    	{
+    		return;
+    	}
+    	byte[] data = new byte[0];
+    	TCPHeader finackHdr = null;
+		TCPHeader finHdr = TCPHeaderUtil.createTCPHeader(
+				localAddr.getPort(), 
+				remoteAddr.getPort(), 
+				0, 
+				0, 
+				false, 
+				true, 
+				false, 
+				callback.GetDestWindowSize(), 
+				data);
+		
+		finHdr.senderAddr = remoteAddr;
+		
+		while(finackHdr == null && connState.GetState() != ConnectionState.CLOSED)
+		{
+			callback.PerformTCPSend(finHdr);
+			callback.SimpleSleep(100);
+			finackHdr = callback.GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.FIN + TCPHeaderType.ACK, 0));
+		}
+		
+		internalClose(true);
+    }
+    
+    void internalClose(boolean val) throws SocketException
+    {
+    	synchronized(this)
+    	{
+    	isClosing = true;
+    	
+    	// clear the buffers
+		synchronized(recvList)
+		{
+        	recvList.clear();
+		}
+		synchronized(sendList)
+		{
+			sendList.clear();
+		}
+		
+		recvTask.setRunnable(false);
+		sendTask.setRunnable(false);
+		discardTask.setRunnable(false);
+		
+		// wait for both tasks to stop
+		try
+		{
+			if(val)
+			{
+				recvTask.getThread().join();
+			}
+			sendTask.getThread().join();
+			
+			synchronized(discardTask)
+    		{
+				val = discardTask.getThread() != null;
+    		}
+			if(val)
+			{
+				discardTask.getThread().join();
+			}
+		} catch (InterruptedException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+    	// initialize buffers
+    	recvList = Collections.synchronizedList(new ArrayList<TCPHeader>());
+    	sendList = Collections.synchronizedList(new ArrayList<TCPHeader>());
+    	// clear the buffers
+    	recvList.clear();
+    	sendList.clear();
+    	
+//    	socket = new T_DatagramSocket(localAddr);
+    	connState = new ConnectionState(ConnectionState.CLOSED);
+    	connHelper = new ConnectionHelper(socket);
+    	callback = new TaskCallback();
+
+    	recvTask = new ReceiveTask(connHelper, callback, recvList);
+    	sendTask = new SendTask(connHelper, callback, sendList);
+    	discardTask = new DiscardPacketTask(connHelper, callback, recvList);
+    	
+    	System.out.println("successfully internal closed");
+    	}
     }
     
     class TaskCallback
@@ -273,8 +399,34 @@ class S_StreamSocket
     			threadWaitingOnRecv.resume();
     		}
     		
+    		//we got a request to close
+    		if(header.syn == 0 && header.ack == 0 && header.fin == 1)
+    		{
+    			// we send fin+ack
+    			header.ack = 1;
+    			header.checksum = Word.createFromInt(TCPHeaderUtil.calculateCheckSum(header));
+    			byte[] bytes = header.toBytes();
+
+    			for(int i = 0; i < 300; i++)
+    			{
+	    			try 
+	    			{
+						connHelper.send(header.toBytes(), TCPHeader.AGGREGATED_HEADER_SIZE, header.senderAddr);
+					} 
+	    			catch (IOException e) 
+	    			{
+						e.printStackTrace();
+					}
+    			}
+    			try {
+					internalClose(false);
+				} catch (SocketException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+    		}
     		// a new connection has arrived
-			if(header.syn == 1 && header.ack == 0 && header.fin == 0)
+    		else if(header.syn == 1 && header.ack == 0 && header.fin == 0)
     		{
     			// remove the header type from the list
     			GetReceivedHeaderOfType(new TCPHeaderType(TCPHeaderType.SYN, header.ackNum.toInt()));

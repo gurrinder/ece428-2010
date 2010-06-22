@@ -557,6 +557,14 @@ class S_StreamSocket
     		
     	}
     	
+    	void AddHeaderToRecvListAtHead(TCPHeader hdr)
+    	{
+    		synchronized(recvList)
+    		{
+    			recvList.add(0, hdr);
+    		}
+    	}
+    	
     	void OnConnectionFailed(Connection conn)
     	{
     		connState.SetState(ConnectionState.CLOSED);

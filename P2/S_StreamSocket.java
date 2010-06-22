@@ -87,6 +87,7 @@ class S_StreamSocket
     	while(retry > 0 && connState.GetState() != ConnectionState.ESTABLISHED && !isClosing)
     	{
         	retry--;
+        	callback.SimpleSleep(2000);
         	System.out.println("client connecting..");
 	    	activeConn = new ConnectTask(connHelper, callback, localAddr, serverAddr);
 	    	activeConn.setRunnable(true);

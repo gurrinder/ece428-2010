@@ -1,7 +1,7 @@
 import java.io.IOException;
 import java.net.*;
 import java.util.*;
-import ece428.socket.*;
+import ece428.socket.T_DatagramSocket;
 
 class S_StreamSocket
 {

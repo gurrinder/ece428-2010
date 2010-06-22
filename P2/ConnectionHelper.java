@@ -72,7 +72,7 @@ class DiscardPacketTask extends ConnectionHelperTask
 		
 		try 
 		{
-			Thread.sleep(callback.GetRetransmitTimeout());
+			Thread.sleep(1000);
 		} 
 		catch (InterruptedException e) 
 		{

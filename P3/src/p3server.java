@@ -1,3 +1,5 @@
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -11,6 +13,8 @@ import java.util.Date;
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import org.omg.CORBA.Environment;
 
 public class p3server
 {
@@ -34,8 +38,11 @@ public class p3server
 	{
 		Decoader decoader = new Decoader(Integer.valueOf(args[1]));
 		DatagramSocket welcomeSocket = new DatagramSocket(12321);
+		//System.console().printf("setenv P "+welcomeSocket.getLocalPort()); 
 		welcomeSocket.setReceiveBufferSize(64 * 1024 * 1024); // 64MB
 		byte[] buf = new byte[1024];
+		BufferedWriter file = new BufferedWriter(new FileWriter(
+		"out.dat"));
 		while (true)
 		{
 			DatagramPacket packet = new DatagramPacket(buf, buf.length);
@@ -48,7 +55,8 @@ public class p3server
 			{
 				byte[] crypto = getSubByte(buf, 0, packet.getLength());
 				byte[] plainText = decoader.decode(crypto);
-				System.out.println(new String(plainText, 1, 10));
+				file.write(new String(plainText, 1, plainText.length-1));
+				file.flush();
 			}
 
 		}

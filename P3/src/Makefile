@@ -4,6 +4,8 @@ all:
 	
 run1:
 	java p3server $(F) $(N)
+	sleep 1
+	echo P=$(P)=
 
 runClient:
 	/home/tripunit/p3client –s $(P) –f $(F) –n $(N)

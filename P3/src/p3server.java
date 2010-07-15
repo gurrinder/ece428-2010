@@ -36,7 +36,7 @@ public class p3server
 			ShortBufferException, BadPaddingException,
 			InvalidAlgorithmParameterException
 	{
-		Decoader decoader = new Decoader(Integer.valueOf(args[1]));
+		Decoder decoder = new Decoder(Integer.valueOf(args[1]));
 		DatagramSocket welcomeSocket = new DatagramSocket(12321);
 		//System.console().printf("setenv P "+welcomeSocket.getLocalPort()); 
 		welcomeSocket.setReceiveBufferSize(64 * 1024 * 1024); // 64MB
@@ -49,12 +49,12 @@ public class p3server
 			welcomeSocket.receive(packet);
 			if (new String(buf, 0, packet.getLength()).equals("   KEY CHANGE   "))
 			{
-				//System.out.println("hopefully KEY CHANGE " + packet.getLength() + " = " + new String(getSubByte(buf, 0, packet.getLength())) + "    =" + Decoader.getHexText(getSubByte(buf, 0, packet.getLength()), packet.getLength()));
-				decoader.resetKey();
+				//System.out.println("hopefully KEY CHANGE " + packet.getLength() + " = " + new String(getSubByte(buf, 0, packet.getLength())) + "    =" + Decoder.getHexText(getSubByte(buf, 0, packet.getLength()), packet.getLength()));
+				decoder.resetKey();
 			} else
 			{
 				byte[] crypto = getSubByte(buf, 0, packet.getLength());
-				byte[] plainText = decoader.decode(crypto);
+				byte[] plainText = decoder.decode(crypto);
 				file.write(new String(plainText, 1, plainText.length-1));
 				file.flush();
 			}
@@ -72,7 +72,7 @@ public class p3server
 
 }
 
-class Decoader
+class Decoder
 {
 	int numZero;
 	SecretKeySpec keyFound = null;
@@ -84,7 +84,7 @@ class Decoader
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	private IvParameterSpec ips = new IvParameterSpec(iv);
 
-	Decoader(int n) throws NoSuchAlgorithmException, NoSuchPaddingException
+	Decoder(int n) throws NoSuchAlgorithmException, NoSuchPaddingException
 	{
 		this.numZero = n;
 		cipher = Cipher.getInstance("AES/CBC/NoPadding");

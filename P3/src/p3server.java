@@ -6,15 +6,12 @@ import java.net.DatagramSocket;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Time;
 import java.util.ArrayList;
 import java.util.Date;
 
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-
-import org.omg.CORBA.Environment;
 
 public class p3server
 {
@@ -158,16 +155,20 @@ class Decoder
 			key = new SecretKeySpec(keyval, "AES");
 			cipher.init(Cipher.DECRYPT_MODE, key, ips);
 			plainText = new byte[msg.length];
-			int ptLength = cipher.update(msg, 0, msg.length, plainText, 0);
+			int ptLength = cipher.update(msg, 0, 16, plainText, 0);
 			ptLength += cipher.doFinal(plainText, ptLength);
-			if (checkString(plainText, ptLength))
+			if (checkStringPositive(plainText, ptLength))
 			{
-				this.keyFound = key;
-				System.out.println("Key Found : " + getHexText(keyval, keyval.length));
-				return plainText;
+				ptLength = cipher.update(msg, 0, msg.length, plainText, 0);
+				ptLength += cipher.doFinal(plainText, ptLength);
+				if (checkString(plainText, ptLength))
+				{
+					this.keyFound = key;
+					System.out.println("Key Found : " + getHexText(keyval, keyval.length));
+					return plainText;
+				}					
 			}
-			else
-				return null;
+			return null;
 		}
 		if (this.lastStop.size() > 0)
 		{
@@ -232,5 +233,14 @@ class Decoder
 				return false;
 		}
 		return xor == plainText[0];
+	}
+	private static boolean checkStringPositive(byte[] plainText, int len)
+	{
+		for (int i = 1; i < len; i++)
+		{
+			if (plainText[i] < 0)
+				return false;
+		}
+		return true;
 	}
 }

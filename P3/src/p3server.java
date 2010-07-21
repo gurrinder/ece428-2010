@@ -75,7 +75,7 @@ class Decoder
 	SecretKeySpec keyFound = null;
 	Cipher cipher;
 	ArrayList<Integer> lastStop = new ArrayList<Integer>();
-	long startTime;
+	long startTime, lastTime;
 	int counter;
 	final byte[] iv = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -113,6 +113,7 @@ class Decoder
 			//keyval = keyFound.getEncoded();
 		}
 		startTime = new Date().getTime();
+		lastTime = startTime;
 		plainText = computeKeyAndDecode(msg, 0, 128 - this.numZero, 0, keyval);
 		counter = 0;
 		long endTime = new Date().getTime();
@@ -149,7 +150,9 @@ class Decoder
 			if (counter >= 1000000)
 			{
 				counter = 0;
-				System.out.println("Time So Far for 1000000 keys = " + (new Date().getTime() - this.startTime));
+				long time = new Date().getTime();
+				System.out.println("Time So Far for 1000000 keys = " + (time - this.lastTime));
+				this.lastTime = time;
 			}
 			//System.out.println("Key Attempted : " + getHexText(keyval, keyval.length));
 			key = new SecretKeySpec(keyval, "AES");
@@ -229,7 +232,7 @@ class Decoder
 		for (int i = 1; i < len; i++)
 		{
 			xor ^= plainText[i];
-			if (plainText[i] < 0)
+			if ((plainText[i] & masks[1][0]) == masks[1][0])
 				return false;
 		}
 		return xor == plainText[0];
@@ -238,7 +241,7 @@ class Decoder
 	{
 		for (int i = 1; i < len; i++)
 		{
-			if (plainText[i] < 0)
+			if ((plainText[i] & masks[1][0]) == masks[1][0])
 				return false;
 		}
 		return true;

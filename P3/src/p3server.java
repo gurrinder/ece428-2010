@@ -26,12 +26,13 @@ public class p3server
 	 * @throws ShortBufferException
 	 * @throws IllegalBlockSizeException
 	 * @throws InvalidAlgorithmParameterException
+	 * @throws InterruptedException 
 	 */
 	public static void main(String[] args) throws IOException,
 			NoSuchAlgorithmException, NoSuchPaddingException,
 			InvalidKeyException, IllegalBlockSizeException,
 			ShortBufferException, BadPaddingException,
-			InvalidAlgorithmParameterException
+			InvalidAlgorithmParameterException, InterruptedException
 	{
 		Decoder decoder = new Decoder(Integer.valueOf(args[1]));
 		DatagramSocket welcomeSocket = new DatagramSocket(12321);
@@ -74,9 +75,8 @@ class Decoder
 	int numZero;
 	SecretKeySpec keyFound = null;
 	Cipher cipher;
-	ArrayList<Integer> lastStop = new ArrayList<Integer>();
-	long startTime, lastTime;
-	int counter;
+	ArrayList<DecoderWorker> workers = new ArrayList<DecoderWorker>();
+	long startTime;
 	final byte[] iv = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	private IvParameterSpec ips = new IvParameterSpec(iv);
@@ -86,36 +86,106 @@ class Decoder
 		this.numZero = n;
 		cipher = Cipher.getInstance("AES/CBC/NoPadding");
 		System.out.println("numZero=" + this.numZero);
+		setupWorkers(4);
+	}
+
+	private void setupWorkers(int n) throws NoSuchAlgorithmException, NoSuchPaddingException
+	{
+		int divSize = (int) (comb(128, this.numZero)/n);
+		int start = 0;
+		int end = 128;
+		for (int i = 0; i < n-1; i++)
+		{
+			int subSum = 0;
+			int lastSubSum = 0;
+			while(subSum < divSize)
+			{
+				lastSubSum = subSum;
+				end--;
+				subSum += comb(end, this.numZero-1);
+			}
+			if (divSize - lastSubSum < subSum - divSize)
+			{
+				subSum = lastSubSum;
+				end++;
+			}
+			assert start <= (128-end-1);
+			workers.add(new DecoderWorker(this.numZero, start, 128-end-1));
+			System.out.printf("%3d-%3d : Worst Case takes 4s/1,000,000 keys time=%d\n", start, 128-end-1, subSum*4/1000000);
+			start = 128-end;
+		}
+		workers.add(new DecoderWorker(this.numZero, start, 128-this.numZero));
+		System.out.printf("%3d-%3d : Worst Case takes 4s/1,000,000 keys time=%d\n", start, 128-this.numZero, (int)(comb(end, this.numZero)*4/1000000));
+	}
+	
+	private double comb(int n, int r)
+	{
+		if (r == 0)
+			return 1;
+		double num=1;
+		double din=1;
+		for (int i = 0; i < r; i++)
+		{
+			num *= n-i;
+			din *= (i+1);
+		}
+		return num/din;
 	}
 
 	public void resetKey()
 	{
 		System.out.println("Reset Key");
-		this.lastStop.clear();
+		for (DecoderWorker d : workers)
+			d.resetKey();
 		keyFound = null;
 	}
 
 	public byte[] decode(byte[] msg) throws InvalidKeyException,
 			InvalidAlgorithmParameterException, ShortBufferException,
-			IllegalBlockSizeException, BadPaddingException
+			IllegalBlockSizeException, BadPaddingException, InterruptedException
 	{
-		byte[] plainText;
-		byte[] keyval = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-				-1, -1, -1 };
+		byte[] plainText = null;
 		if (keyFound != null)
 		{
 			plainText = new byte[msg.length];
 			int ptLength = cipher.update(msg, 0, msg.length, plainText, 0);
 			ptLength += cipher.doFinal(plainText, ptLength);
-			if (checkString(plainText, ptLength))
+			if (DecoderWorker.checkString(plainText, ptLength))
+			{
+				System.out.printf("Key Reused\n");
 				return plainText;
+			}
 			
 			//keyval = keyFound.getEncoded();
 		}
 		startTime = new Date().getTime();
-		lastTime = startTime;
-		plainText = computeKeyAndDecode(msg, 0, 128 - this.numZero, 0, keyval);
-		counter = 0;
+		for (DecoderWorker d : workers)
+			d.setMsgAndRun(msg);
+		
+		while(keyFound == null)
+		{
+			Thread.sleep(1000);
+			int deadCount = 0;
+			for (DecoderWorker d : workers)
+			{
+				if (!d.isAlive() && d.keyFound != null)
+				{
+					plainText = d.plainText;
+					this.keyFound = d.keyFound;
+					cipher.init(Cipher.DECRYPT_MODE, this.keyFound, ips);
+					for (DecoderWorker dd : workers)
+						dd.endThread();
+					break;
+				}
+				else if (!d.isAlive())
+				{
+					deadCount++;
+				}
+			}
+			if (deadCount == workers.size())
+				return null;
+		}
+		
 		long endTime = new Date().getTime();
 		System.out.println("Time Execution = " + (endTime-startTime));
 		return plainText;
@@ -131,12 +201,67 @@ class Decoder
 			int v = 0;
 			if (buf[i] < 0)
 				v+=128;
-			v += buf[i] & masks[0][0];
+			v += buf[i] & DecoderWorker.masks[0][0];
 			hex.append(Integer.toHexString(v).toUpperCase());
 		}
 		return hex.toString();
 	}
+}
 
+class DecoderWorker implements Runnable
+{
+	int numZero;
+	SecretKeySpec keyFound = null;
+	Cipher cipher;
+	ArrayList<Integer> lastStop = new ArrayList<Integer>();
+	final byte[] iv = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
+	private IvParameterSpec ips = new IvParameterSpec(iv);
+	private byte[] msg;
+	private int start;
+	private int end;
+	private boolean keyFoundByAnother;
+	private Thread myThread;
+	public byte[] plainText;
+
+	DecoderWorker(int n, int start, int end) throws NoSuchAlgorithmException, NoSuchPaddingException
+	{
+		this.numZero = n;
+		this.start = start;
+		this.end = end;
+		cipher = Cipher.getInstance("AES/CBC/NoPadding");
+		//System.out.printf("%3d-%3d : Initialized\n", this.start, this.end);
+	}
+
+	public boolean isAlive()
+	{
+		return this.myThread.isAlive();
+	}
+
+	public void resetKey()
+	{
+		//System.out.printf("%3d-%3d : Key Reset\n", this.start, this.end);
+		this.lastStop.clear();
+		keyFound = null;
+	}
+	
+	public void setMsgAndRun(byte[] msg)
+	{
+		this.msg = msg;
+		this.keyFoundByAnother = false;
+		this.keyFound = null;
+		this.myThread = new Thread(this);
+		//System.out.printf("%3d-%3d : Starting\n", this.start, this.end);
+		this.myThread.start();
+	}
+	
+	public void endThread() throws InterruptedException
+	{
+		this.keyFoundByAnother = true;
+		this.myThread.join();
+		//System.out.printf("%3d-%3d : Ended\n", this.start, this.end);
+	}
+	
 	private byte[] computeKeyAndDecode(byte[] msg, int start, int end, int z, byte[] keyval)
 			throws ShortBufferException, IllegalBlockSizeException,
 			BadPaddingException, InvalidKeyException,
@@ -145,15 +270,8 @@ class Decoder
 		byte[] plainText;
 		if (z == numZero)
 		{
+
 			SecretKeySpec key;
-			counter++;
-			if (counter >= 1000000)
-			{
-				counter = 0;
-				long time = new Date().getTime();
-				System.out.println("Time So Far for 1000000 keys = " + (time - this.lastTime));
-				this.lastTime = time;
-			}
 			//System.out.println("Key Attempted : " + getHexText(keyval, keyval.length));
 			key = new SecretKeySpec(keyval, "AES");
 			cipher.init(Cipher.DECRYPT_MODE, key, ips);
@@ -167,7 +285,7 @@ class Decoder
 				if (checkString(plainText, ptLength))
 				{
 					this.keyFound = key;
-					System.out.println("Key Found : " + getHexText(keyval, keyval.length));
+					System.out.printf("%3d-%3d : Key Found\n", this.start, this.end);
 					return plainText;
 				}					
 			}
@@ -178,14 +296,15 @@ class Decoder
 			start = this.lastStop.remove(0);
 		}
 		byte[] newkeyval = new byte[keyval.length];
+		for (int j = 0; j < keyval.length; j++)
+			newkeyval[j] = keyval[j];
 		for (int i = start; i <= end; i++)
 		{
-			for (int j = 0; j < keyval.length; j++)
-				newkeyval[j] = keyval[j];
-
+			if (i != start)
+				setBit(newkeyval, i-1, 1);
 			setBit(newkeyval, i, 0);
-			plainText = computeKeyAndDecodeDivider(msg, i+1, z+1, newkeyval);
-			if (plainText != null)
+			plainText = computeKeyAndDecode(msg, i+1, 128-this.numZero+z+1, z+1, newkeyval);
+			if (this.keyFoundByAnother || plainText != null)
 			{
 				this.lastStop.add(0, i);
 				return plainText;
@@ -193,28 +312,8 @@ class Decoder
 		}
 		return null;
 	}
-	
-	
-	
-	private byte[] computeKeyAndDecodeDivider(byte[] msg, int start, int z,	byte[] keyval) throws InvalidKeyException, ShortBufferException, IllegalBlockSizeException, BadPaddingException, InvalidAlgorithmParameterException
-	{
-		// TODO Auto-generated method stub
-		return computeKeyAndDecode(msg, start, 128-this.numZero+z, z, keyval);
-	}
 
-	private int findFirstZero(byte[] keyval, int start)
-	{
-		for (int i = start; i < 128; i++)
-		{
-			if ((keyval[i/8] & masks[0][i%8]) == 0)
-				return i;
-		}
-		return start;
-	}
-
-
-
-	private final static byte[][] masks = {{127, -65, -33, -17, -9, -5, -3, -2},
+	final static byte[][] masks = {{127, -65, -33, -17, -9, -5, -3, -2},
 		{-128, 64, 32, 16, 8, 4, 2, 1}};
 	private static void setBit(byte[] data, int pos, int val)
 	{
@@ -226,7 +325,7 @@ class Decoder
 			data[posByte] = (byte) (data[posByte] | masks[val][posBit]);
 	}
 
-	private static boolean checkString(byte[] plainText, int len)
+	static boolean checkString(byte[] plainText, int len)
 	{
 		byte xor = 0;
 		for (int i = 1; i < len; i++)
@@ -245,5 +344,37 @@ class Decoder
 				return false;
 		}
 		return true;
+	}
+
+	@Override
+	public void run()
+	{
+		byte[] keyval = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+				-1, -1, -1 };
+		try
+		{
+			this.plainText = computeKeyAndDecode(msg, this.start, this.end, 0, keyval);
+		} catch (InvalidKeyException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (ShortBufferException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (IllegalBlockSizeException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (BadPaddingException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} catch (InvalidAlgorithmParameterException e)
+		{
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+
 	}
 }

@@ -9,7 +9,11 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Date;
 
-import javax.crypto.*;
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.ShortBufferException;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -35,12 +39,18 @@ public class p3server
 			InvalidAlgorithmParameterException, InterruptedException
 	{
 		Decoder decoder = new Decoder(Integer.valueOf(args[1]));
-		DatagramSocket welcomeSocket = new DatagramSocket(12321);
+		DatagramSocket welcomeSocket = new DatagramSocket();
+		int serverPort = welcomeSocket.getLocalPort();
+		
 		//System.console().printf("setenv P "+welcomeSocket.getLocalPort()); 
 		welcomeSocket.setReceiveBufferSize(64 * 1024 * 1024); // 64MB
 		byte[] buf = new byte[1024];
-		BufferedWriter file = new BufferedWriter(new FileWriter(
-		"out.dat"));
+		BufferedWriter file = new BufferedWriter(new FileWriter("out.dat"));
+		
+		// start client with the specified parameters
+		ProcessBuilder builder = new ProcessBuilder("/home/tripunit/p3client", "-s", Integer.toString(serverPort), "-f", args[0], "-n", args[1]);
+		Process client = builder.start();
+		
 		while (true)
 		{
 			DatagramPacket packet = new DatagramPacket(buf, buf.length);
@@ -194,7 +204,6 @@ class Decoder
 
 	public static String getHexText(byte[] buf, int len)
 	{
-		// TODO Auto-generated method stub
 		StringBuilder hex = new StringBuilder();
 		for (int i = 0; i < len; i++)
 		{
@@ -356,23 +365,18 @@ class DecoderWorker implements Runnable
 			this.plainText = computeKeyAndDecode(msg, this.start, this.end, 0, keyval);
 		} catch (InvalidKeyException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (ShortBufferException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IllegalBlockSizeException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (BadPaddingException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (InvalidAlgorithmParameterException e)
 		{
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 

@@ -133,7 +133,7 @@ class Decoder
 		workers.add(new DecoderWorker(this.numZero, start, 128-this.numZero));
 		System.out.printf("%3d-%3d : Worst Case takes 4s/1,000,000 keys time=%d\n", start, 128-this.numZero, (int)(comb(end, this.numZero)*4/1000000));
 	}
-	
+	// calculates nCr
 	private double comb(int n, int r)
 	{
 		if (r == 0)
@@ -163,6 +163,8 @@ class Decoder
 		byte[] plainText = null;
 		if (keyFound != null)
 		{
+			
+			// use old key if possible
 			plainText = new byte[msg.length];
 			int ptLength = cipher.update(msg, 0, msg.length, plainText, 0);
 			ptLength += cipher.doFinal(plainText, ptLength);
@@ -171,13 +173,14 @@ class Decoder
 				System.out.printf("Key Reused\n");
 				return plainText;
 			}
-			
-			//keyval = keyFound.getEncoded();
 		}
 		startTime = new Date().getTime();
+		
+		// starting all workers
 		for (DecoderWorker d : workers)
 			d.setMsgAndRun(msg);
 		
+		// waiting for workers to end
 		while(keyFound == null)
 		{
 			Thread.sleep(1000);
@@ -186,9 +189,12 @@ class Decoder
 			{
 				if (!d.isAlive() && d.keyFound != null)
 				{
+					// a workers found a key
 					plainText = d.plainText;
 					this.keyFound = d.keyFound;
 					cipher.init(Cipher.DECRYPT_MODE, this.keyFound, ips);
+					
+					// stoping all other workers
 					for (DecoderWorker dd : workers)
 						dd.endThread();
 					break;
@@ -198,6 +204,7 @@ class Decoder
 					deadCount++;
 				}
 			}
+			// test if all workers died without getting a key
 			if (deadCount == workers.size())
 				return null;
 		}
@@ -285,16 +292,22 @@ class DecoderWorker implements Runnable
 		byte[] plainText;
 		if (z == numZero)
 		{
-
+			// base case we have added all zeros that need to be added
+			// trying to decrypt
+			
 			SecretKeySpec key;
 			//System.out.println("Key Attempted : " + getHexText(keyval, keyval.length));
 			key = new SecretKeySpec(keyval, "AES");
 			cipher.init(Cipher.DECRYPT_MODE, key, ips);
 			plainText = new byte[msg.length];
+			
+			// decripting first 16 bytes and verifying that they are all between 0 and 127 inclusive
 			int ptLength = cipher.update(msg, 0, 16, plainText, 0);
 			ptLength += cipher.doFinal(plainText, ptLength);
 			if (checkStringPositive(plainText, ptLength))
 			{
+				// now attempting the whole message and checking
+				// if the first byte is XOR of the rest
 				ptLength = cipher.update(msg, 0, msg.length, plainText, 0);
 				ptLength += cipher.doFinal(plainText, ptLength);
 				if (checkString(plainText, ptLength))
@@ -306,6 +319,10 @@ class DecoderWorker implements Runnable
 			}
 			return null;
 		}
+		
+		// non base case
+		
+		// if had halted and the key did not work for next string restarting from last place the worker stoped
 		if (this.lastStop.size() > 0)
 		{
 			start = this.lastStop.remove(0);

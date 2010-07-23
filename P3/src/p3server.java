@@ -38,11 +38,10 @@ public class p3server
 			ShortBufferException, BadPaddingException,
 			InvalidAlgorithmParameterException, InterruptedException
 	{
+		// setting up decoder and data socket
 		Decoder decoder = new Decoder(Integer.valueOf(args[1]));
 		DatagramSocket welcomeSocket = new DatagramSocket();
 		int serverPort = welcomeSocket.getLocalPort();
-		
-		//System.console().printf("setenv P "+welcomeSocket.getLocalPort()); 
 		welcomeSocket.setReceiveBufferSize(64 * 1024 * 1024); // 64MB
 		byte[] buf = new byte[1024];
 		BufferedWriter file = new BufferedWriter(new FileWriter("out.dat"));
@@ -51,16 +50,21 @@ public class p3server
 		ProcessBuilder builder = new ProcessBuilder("/home/tripunit/p3client", "-s", Integer.toString(serverPort), "-f", args[0], "-n", args[1]);
 		Process client = builder.start();
 		
+		// endlessly receiving data from p3Client and decoding the data
 		while (true)
 		{
 			DatagramPacket packet = new DatagramPacket(buf, buf.length);
 			welcomeSocket.receive(packet);
+			
+			// check if it is a "KEY CHANGE"
 			if (new String(buf, 0, packet.getLength()).equals("   KEY CHANGE   "))
 			{
-				//System.out.println("hopefully KEY CHANGE " + packet.getLength() + " = " + new String(getSubByte(buf, 0, packet.getLength())) + "    =" + Decoder.getHexText(getSubByte(buf, 0, packet.getLength()), packet.getLength()));
+				// reset key
 				decoder.resetKey();
-			} else
+			} 
+			else
 			{
+				// decode and write to file
 				byte[] crypto = getSubByte(buf, 0, packet.getLength());
 				byte[] plainText = decoder.decode(crypto);
 				file.write(new String(plainText, 1, plainText.length-1));
@@ -70,6 +74,7 @@ public class p3server
 		}
 	}
 
+	// This function retrieves a set of bytes that are of the length needed.
 	private static byte[] getSubByte(byte[] buf, int s, int length)
 	{
 		byte[] ret = new byte[length];
@@ -82,10 +87,11 @@ public class p3server
 
 class Decoder
 {
-	int numZero;
+	int numZero;								// number of zeros in the key (-n value)
 	SecretKeySpec keyFound = null;
 	Cipher cipher;
 	ArrayList<DecoderWorker> workers = new ArrayList<DecoderWorker>();
+												// workers that try to find the key
 	long startTime;
 	final byte[] iv = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -96,9 +102,9 @@ class Decoder
 		this.numZero = n;
 		cipher = Cipher.getInstance("AES/CBC/NoPadding");
 		System.out.println("numZero=" + this.numZero);
-		setupWorkers(4);
+		setupWorkers(4);	// setting up 4 workers because ecelinux has 4 core machines
 	}
-
+	// initializes the workers with the proper sections of places the fist zero can be.
 	private void setupWorkers(int n) throws NoSuchAlgorithmException, NoSuchPaddingException
 	{
 		int divSize = (int) (comb(128, this.numZero)/n);
